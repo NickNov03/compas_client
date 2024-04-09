@@ -2,21 +2,24 @@ package com.android.example.cameraxapp
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.*
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.Insets
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.hardware.SensorManager.getOrientation
-import android.hardware.SensorManager.getQuaternionFromVector
-import android.hardware.SensorManager.getRotationMatrix
 import android.location.Location
-import android.location.Location.*
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.util.Size
+import android.util.TypedValue
+import android.view.WindowInsets
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
@@ -26,26 +29,26 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.android.example.cameraxapp.databinding.ActivityMainBinding
 import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationRequest.*
+import com.google.android.gms.location.LocationRequest.PRIORITY_HIGH_ACCURACY
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.tasks.CancellationToken
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.gms.tasks.OnTokenCanceledListener
-import io.ktor.client.*
-import io.ktor.client.call.*
-import io.ktor.client.engine.cio.*
-import io.ktor.client.plugins.contentnegotiation.*
-import io.ktor.client.request.*
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
-import io.ktor.client.statement.*
-import io.ktor.http.*
-import io.ktor.serialization.kotlinx.json.*
-import io.ktor.util.pipeline.*
-import kotlinx.coroutines.*
-import kotlinx.serialization.*
-import kotlinx.serialization.json.*
-import java.io.*
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
+import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.math.PI
@@ -53,6 +56,7 @@ import kotlin.math.acos
 import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 
 class MainActivity : AppCompatActivity(), SensorEventListener {
@@ -64,7 +68,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     var height : Int = 0
 
     // sight angle (объект с углоами обзора камеры)
-    lateinit var sa : CamParams
+    lateinit var cam_params_manager : CamParams
 
     // сериализуемый объект кооридант, передаваемых с сервера
     lateinit var coords : Coords
@@ -89,8 +93,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     // кватернион разницы (доворота)
     var q_diff : Quaternion = Quaternion(0.0,0.0,0.0,0.0)
 
-    val v_frontFRD = Vector(1.0, 0.0, 0.0)
-    var v_frontNED = Vector(0.0, 0.0, 0.0)
+    val v_frontRUB = Vector(0.0, 0.0, -1.0)
+    //var v_frontNED = Vector(0.0, 0.0, 0.0)
 
     private lateinit var viewBinding: ActivityMainBinding
 
@@ -105,6 +109,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     lateinit var magnetometer: Sensor
     lateinit var rot: Sensor
 
+    @RequiresApi(Build.VERSION_CODES.R)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -115,8 +120,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             requestPermissions()
         }
 
-        sa = CamParams(application)
-        sa.calculateFOV()
+        cam_params_manager = CamParams(application)
+        cam_params_manager.calculateFOV()
+
 
         viewBinding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(viewBinding.root)
@@ -140,6 +146,46 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         // костыль (1-й раз локация не работает))))
         get_Location()
+
+        prepare_text(viewBinding.N)
+        prepare_text(viewBinding.S)
+        prepare_text(viewBinding.W)
+        prepare_text(viewBinding.E)
+        prepare_text(viewBinding.NE)
+        prepare_text(viewBinding.SE)
+        prepare_text(viewBinding.NW)
+        prepare_text(viewBinding.SW)
+
+
+
+        val metrics = windowManager.currentWindowMetrics
+        // Gets all excluding insets
+        // Gets all excluding insets
+        val windowInsets = metrics.windowInsets
+        val insets: Insets = windowInsets.getInsetsIgnoringVisibility(
+            WindowInsets.Type.navigationBars()
+                    or WindowInsets.Type.displayCutout()
+        )
+
+        val insetsWidth: Int = insets.right + insets.left
+        val insetsHeight: Int = insets.top + insets.bottom
+
+        // Legacy size that Display#getSize reports
+
+        // Legacy size that Display#getSize reports
+        val bounds = metrics.bounds
+        val legacySize = Size(
+            bounds.width() - insetsWidth,
+            bounds.height() - insetsHeight
+        )
+        width = legacySize.width
+        height = legacySize.height
+        cam_params_manager.calculateFocal(width)
+    }
+
+    fun prepare_text(t :TextView) {
+        t.setTextColor(Color.RED)
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP,25.0F)
     }
 
     override fun onResume() {
@@ -265,17 +311,17 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         q_diff *= (1 / q_diff.abs())
 
 
-        v_ph_Sun = q_diff.rotate(v_ph_Sun)
+        //v_ph_Sun = q_diff.rotate(v_ph_Sun)
         /*val msg = "Calculated"
         Toast.makeText(baseContext, msg, Toast.LENGTH_LONG).show()
         Log.d(TAG, msg)*/
         //var a = q_rot.rotate(v_Eph_Sun)
         //val msg = a.x.toString() + ' ' + a.y.toString() + ' ' + a.z.toString() + ' ' +
         //        v_Img_Sun.x.toString() + ' ' + v_Img_Sun.y.toString() + ' ' + v_Img_Sun.z.toString()
-        val msg = v_Eph_Sun.x.toString() + ' ' + v_Eph_Sun.y.toString() + ' ' + v_Eph_Sun.z.toString() + ' ' +
-                v_ph_Sun.x.toString() + ' ' + v_ph_Sun.y.toString() + ' ' + v_ph_Sun.z.toString()
-        //val msg = q_diff.x.toString() + ' ' + q_diff.y.toString() + ' ' + q_diff.z.toString() + ' ' +
-        //               q_diff.w.toString() + q_diff.abs().toString()
+        //val msg = v_Eph_Sun.x.toString() + ' ' + v_Eph_Sun.y.toString() + ' ' + v_Eph_Sun.z.toString() + ' ' +
+         //       v_ph_Sun.x.toString() + ' ' + v_ph_Sun.y.toString() + ' ' + v_ph_Sun.z.toString()
+        val msg = q_diff.x.toString() + ' ' + q_diff.y.toString() + ' ' + q_diff.z.toString() + ' ' +
+                       q_diff.w.toString() + q_diff.abs().toString()
         Toast.makeText(baseContext, msg, Toast.LENGTH_LONG).show()
         Log.d(TAG, msg)
         viewBinding.textView2.text = msg
@@ -388,11 +434,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
 
     private fun calculate_a_hor(): Float {
-        return coords.a_hor(sa.horizonalAngle, width)
+        return coords.a_hor(cam_params_manager.horizonalAngle, width)
     }
 
     private fun calculate_a_ver(): Float {
-        return coords.a_ver(sa.verticalAngle, height)
+        return coords.a_ver(cam_params_manager.verticalAngle, height)
     }
     private fun DtR(x: Float): Float {
         return x * 180 / PI.toFloat()
@@ -406,9 +452,17 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         try {
             if (event.sensor.type == Sensor.TYPE_ROTATION_VECTOR) {
-
                 q_rot = Quaternion(event.values[3].toDouble(), event.values[0].toDouble(),
-                        event.values[1].toDouble(), event.values[2].toDouble()) // ENU
+                    event.values[1].toDouble(), event.values[2].toDouble()) // ENU
+                if (calc) {
+                    val q = q_diff * q_rot
+                    val orient = q.rotate(v_frontRUB)
+                    draw(q)
+                }
+                else {
+                    val orient = q_rot.rotate(v_frontRUB)
+                    draw(q_rot)
+                }
 
                 /*var r = Vector(0.0F, 0.0F, -1.0F)
                 val b = q_rot.rotate(r)
@@ -479,6 +533,62 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             }*/
         } catch (_:Exception) { }
 
+    }
+
+    // ENU
+    val N = Vector(0.0, 1.0, 0.0)
+    val S = Vector(0.0, -1.0, 0.0)
+    val W = Vector(-1.0, 0.0, 0.0)
+    val E = Vector(1.0, 0.0, 0.0)
+    val NE = Vector(sqrt(2.0) / 2, sqrt(2.0) / 2, 0.0)
+    val SE = Vector(sqrt(2.0) / 2, -sqrt(2.0) / 2, 0.0)
+    val NW = Vector(-sqrt(2.0) / 2, sqrt(2.0) / 2, 0.0)
+    val SW = Vector(-sqrt(2.0) / 2, -sqrt(2.0) / 2, 0.0)
+
+    fun draw(q: Quaternion) {
+        // RUB
+        var q_inv = q.invert()
+        var n = q_inv.rotate(N)
+        var s = q_inv.rotate(S)
+        var w = q_inv.rotate(W)
+        var e = q_inv.rotate(E)
+        var ne = q_inv.rotate(NE)
+        var se = q_inv.rotate(SE)
+        var nw = q_inv.rotate(NW)
+        var sw = q_inv.rotate(SW)
+
+        /*n = Vector(-n.x/n.z, n.y/n.z, -1.0)
+
+        n *= cam_params_manager.focal_len_pix.toDouble()
+        val nx = n.x + width / 2
+        val ny = n.y + height / 2
+        val msg = n.x.toString() + " " + n.y.toString()
+        viewBinding.textView2.text = msg
+        viewBinding.N.x  = nx.toFloat()
+        viewBinding.N.y = ny.toFloat()*/
+        make_text(n , viewBinding.N)
+        make_text(s , viewBinding.S)
+        make_text(w , viewBinding.W)
+        make_text(e , viewBinding.E)
+        make_text(ne, viewBinding.NE)
+        make_text(se, viewBinding.SE)
+        make_text(nw, viewBinding.NW)
+        make_text(sw, viewBinding.SW)
+    }
+
+    fun make_text(vec : Vector, t : TextView) {
+
+        var v = Vector(-vec.x / vec.z, vec.y / vec.z, -1.0)
+
+        v *= cam_params_manager.focal_len_pix.toDouble()
+        val vx = v.x + width / 2
+        val vy = v.y + height / 2
+        t.x  = vx.toFloat()
+        t.y = vy.toFloat()
+        if (vec.z > 0)
+            t.alpha = 0.0F
+        else
+            t.alpha = 1.0F
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) { }

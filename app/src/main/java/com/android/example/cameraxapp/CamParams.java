@@ -7,11 +7,13 @@ import android.hardware.camera2.CameraManager;
 import android.util.SizeF;
 
 import androidx.annotation.NonNull;
-import android.hardware.Camera;
 
 public class CamParams {
     float horizonalAngle;
     float verticalAngle;
+
+    float focal_len_pix;
+
     private Application application;
 
     public CamParams(@NonNull Application application) {
@@ -36,6 +38,11 @@ public class CamParams {
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
+    }
+
+    public void calculateFocal(int width_pix) {
+
+        focal_len_pix = (int) (width_pix / (2 * Math.tan(horizonalAngle / 2)));
     }
 
     /*private static Object sAccesLock = new Object();

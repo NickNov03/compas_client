@@ -13,7 +13,7 @@ data class Coords(var Az : Float, var El : Float, var x: Float, var y: Float) {
         // a_hor_cam - горизонтальный угол обзора камеры
         // width_cam - ширина изображения в пикселях
         val k :Float = a_hor_cam / width_cam
-        var x_center : Int = (width_cam / 2).toInt()
+        val x_center : Int = (width_cam / 2).toInt()
         return (x - x_center) * k
     }
 
@@ -23,7 +23,7 @@ data class Coords(var Az : Float, var El : Float, var x: Float, var y: Float) {
         // a_ver_cam - вертикальный угол обзора камеры
         // height_cam - высота изображения в пикселях
         val k : Float = a_ver_cam / height_cam
-        var y_center : Int = (height_cam / 2).toInt()
+        val y_center : Int = (height_cam / 2).toInt()
         return (y - y_center) * k
     }
 
