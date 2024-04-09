@@ -407,16 +407,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         try {
             if (event.sensor.type == Sensor.TYPE_ROTATION_VECTOR) {
 
-
-                /*val q = FloatArray(4)
-                getQuaternionFromVector(q, event.values)*/
-
-                //q_rot = Quaternion(event.values[3].toDouble(), event.values[1].toDouble(),
-                //    event.values[0].toDouble(), -event.values[2].toDouble()) // NED
-
-                //q_rot = Quaternion(event.values[3].toDouble(), -event.values[2].toDouble(),
-                //        event.values[0].toDouble(), -event.values[1].toDouble()) // FRD
-
                 q_rot = Quaternion(event.values[3].toDouble(), event.values[0].toDouble(),
                         event.values[1].toDouble(), event.values[2].toDouble()) // ENU
 
