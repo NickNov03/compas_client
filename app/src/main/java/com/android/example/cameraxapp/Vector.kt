@@ -29,8 +29,4 @@ data class Vector(val x: Double, val y: Double, val z: Double) {
         return Vector(this.x/norm, this.y/norm, this.z/norm)
     }
 
-    fun DEStoNED(): Vector {
-        return Vector(-this.z, this.y, this.x).normalize()
-    }
-
 }
