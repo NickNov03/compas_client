@@ -78,7 +78,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     var lon: Double = 0.0
 
     // адрес сервера
-    var url : String = "http://192.168.0.103:8080"
+    var url : String = "http://192.168.0.103:8080" // hi
 
     var calc : Boolean = false
 
