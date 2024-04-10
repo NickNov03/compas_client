@@ -85,10 +85,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     var v_Img_Sun: Vector = Vector(0.0,0.0,0.0)
     var v_Eph_Sun: Vector = Vector(0.0,0.0,0.0)
 
-    var q_ph_Sun : Quaternion = Quaternion(0.0,0.0,0.0,0.0)
-
     // кватернион вращения
     var q_rot : Quaternion = Quaternion(0.0,0.0,0.0,0.0)
+
+    var q_photo_moment : Quaternion = Quaternion(0.0,0.0,0.0,0.0)
 
     // кватернион разницы (доворота)
     var q_diff : Quaternion = Quaternion(0.0,0.0,0.0,0.0)
@@ -204,6 +204,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private fun get_Image() {
         val bitmap = viewBinding.viewFinder.bitmap
+        q_photo_moment = q_rot
         width = bitmap?.width ?: return
         height = bitmap.height
         val stream = ByteArrayOutputStream()
@@ -292,7 +293,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         v_Img_Sun = coords.v_Img_RUB(a_hor, a_ver) // good
         v_Eph_Sun = coords.v_Eph_ENU() // good
 
-        var v_ph_Sun = q_rot.rotate(v_Img_Sun)
+        var v_ph_Sun = q_photo_moment.rotate(v_Img_Sun)
 
         val norm_v_ph_Sun = v_ph_Sun.norm()
         val norm_v_Eph_Sun = v_Eph_Sun.norm()
@@ -311,7 +312,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         q_diff *= (1 / q_diff.abs())
 
 
-        //v_ph_Sun = q_diff.rotate(v_ph_Sun)
+        val v_ph_Sun0 = q_diff.rotate(v_ph_Sun)
         /*val msg = "Calculated"
         Toast.makeText(baseContext, msg, Toast.LENGTH_LONG).show()
         Log.d(TAG, msg)*/
@@ -320,8 +321,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         //        v_Img_Sun.x.toString() + ' ' + v_Img_Sun.y.toString() + ' ' + v_Img_Sun.z.toString()
         //val msg = v_Eph_Sun.x.toString() + ' ' + v_Eph_Sun.y.toString() + ' ' + v_Eph_Sun.z.toString() + ' ' +
          //       v_ph_Sun.x.toString() + ' ' + v_ph_Sun.y.toString() + ' ' + v_ph_Sun.z.toString()
-        val msg = q_diff.x.toString() + ' ' + q_diff.y.toString() + ' ' + q_diff.z.toString() + ' ' +
-                       q_diff.w.toString() + q_diff.abs().toString()
+        val msg = String.format("%.3f,    %.3f,    %.3f,    %.3f,    %.3f,    %.3f,    %.3f,    %.3f,    %.3f",
+            v_Eph_Sun.x, v_Eph_Sun.y, v_Eph_Sun.z,
+            v_ph_Sun.x, v_ph_Sun.y, v_ph_Sun.z,
+            v_ph_Sun0.x, v_ph_Sun0.y, v_ph_Sun0.z)
         Toast.makeText(baseContext, msg, Toast.LENGTH_LONG).show()
         Log.d(TAG, msg)
         viewBinding.textView2.text = msg
@@ -334,8 +337,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         // get picture
         get_Image()
-
-        // тут надо запомнить кватернион
 
         // получаем локацию (lon, lat)
         get_Location()
